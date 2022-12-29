@@ -1,5 +1,7 @@
 """Tests the TradeBoy Module"""
 
+from example import Strategy
+
 from tradeboy import TradeBoy
 
 client = TradeBoy(exchange='phemex')
@@ -13,7 +15,13 @@ def test_balance():
     assert bal is not None
 
 
+def test_engine():
+    global client
+
+    client.engine(Strategy)
+
+
 if __name__ == '__main__':
     test_balance()
-
+    test_engine()
     print('All tests passed')
