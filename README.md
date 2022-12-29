@@ -1,0 +1,2 @@
+# TradeBoy
+Automated crypto trader
