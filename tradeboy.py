@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # TODO: Error handling
-# TODO: Future engine
 # TODO: Spot engine
 # TODO: Create unified symbol for both spot and future
 # TODO: Fix docstrings
+# TODO: Add logger
 
 
 class TradeBoy:
@@ -24,18 +24,136 @@ class TradeBoy:
             raise Exception(f'{exchange} is not supported')
 
         # Setup class properties
-        self._candleboy = CandleBoy()
-        self._exchange = exchange
-        self._in_trade = False
+        self.exchange = exchange
+        self.stats = {'wins': 0, 'losses': 0, 'profit': 0, 'trades': 0}
+        self.info = {}
+        # Connect to exchange
         self._load()
 
 # ------------------------------- Class Methods ------------------------------ #
 
     def _load(self):
         """Connects to exchange client endpoint"""
-        if self._exchange == 'phemex':
+        # Connect to indicator client
+        self._indicator_client = CandleBoy()
+        # Connect to exchange client
+        if self.exchange == 'phemex':
             self._client = PhemexBoy(
                 os.getenv('PHEMEX_KEY'), os.getenv('PHEMEX_SECRET'))
+
+    def _log_trade_info(self):
+        """Outputs trade information"""
+        side = self.info['side']
+        symbol = self.info['symbol']
+        amount = self.info['amount']
+        sl = self.info['sl']
+        tp = self.info['tp']
+        code = self.info['code']
+        entry = self.stats['entry']
+
+        price = self.price(symbol)
+        balance = round(self.balance('USD', code), 2)
+
+        print(
+            f'\nTrade Information\n----------\nSide: {side}\nBalance: ${balance}\nPrice: ${price}\nEntry: ${entry}\nTP: ${tp}\nSL: ${sl}\nAmount: {amount}')
+        self._log_stats()
+
+    def _log_stats(self):
+        """Displays stats to output"""
+        wins = self.stats['wins']
+        losses = self.stats['losses']
+        profit = round(self.stats['profit'], 2)
+        trades = self.stats['trades']
+
+        print(
+            f'\nStats\n-------\nWins: {wins}\nLosses: {losses}\nProfit: {profit} (USD)\nTrades: {trades}\n')
+
+    def _open_position(self, side, symbol, type, amount, price, sl, tp):
+        """Opens a position within the future market"""
+        if side == 'long':
+            # Open long position
+            self._client.long(symbol, type, amount, price, sl, tp)
+            self.intro['entry'] = self.price(symbol)
+
+        elif side == 'short':
+            # Open short position
+            self._client.short(symbol, type, amount, price, sl, tp)
+            self.info['entry'] = self.price(symbol)
+
+    def _calculate_profit(self):
+        """Returns current profit or loss"""
+        code = self.info['code']
+        starting_bal = self.info['balance']
+        bal = self.balance('USD', code)
+
+        if starting_bal > bal:
+            return round(starting_bal - bal, 2)
+        if starting_bal < bal:
+            return round(bal - starting_bal, 2)
+
+    def _win(self):
+        """Updates win stats"""
+        self.stats['wins'] += 1
+        self.stats['profit'] += self._calculate_profit()
+
+    def _loss(self):
+        """Updates win stats"""
+        self.stats['losses'] += 1
+        self.stats['profit'] -= self._calculate_profit()
+
+    def _close_position(self, symbol, side, tp, sl):
+        """Checks if tp or sl has triggered and updates stats"""
+        if side == 'long':
+            if self.price(symbol) >= tp:
+                self._win()
+
+            if self.price(symbol) <= sl:
+                self._loss()
+
+        if side == 'short':
+            if self.price(symbol) <= tp:
+                self._win()
+            if self.price(symbol) >= sl:
+                self._loss()
+
+    def _future_engine(self):
+        """Initiates trades within the future market"""
+        side = self.info['side']
+        symbol = self.info['symbol']
+        amount = self.info['amount']
+        price = self.info['price']
+        sl = self.info['sl']
+        tp = self.info['tp']
+        type = self.info['type']
+
+        while not self.in_position(symbol):
+            self._open_position(side, symbol, type, amount, price, sl, tp)
+
+        while self.in_position(symbol):
+            self._log_trade_info()
+            self._close_position(symbol, side, tp, sl)
+            sleep(20)
+
+    def _info_collect(self, strategy):
+        """Sets info data from strategy
+
+        strategy (Class Object) - Separate module created by client (see docs)
+        """
+        self.info.update(strategy.props)
+        self.info.update(strategy.params)
+        self.info['balance'] = self.balance('USD', strategy.props['code'])
+
+    def _entry_engine(self, strategy):
+        """Finds an entry
+
+        strategy (Class Object) - Separate module created by client (see docs)
+        """
+        while not strategy.entry():
+            # TODO: Move to logger
+            print('\nLooking for entry...\n')
+            self._log_stats()
+            sleep(20)
+
 
 # ------------------------------ Helper Methods ------------------------------ #
 
@@ -108,13 +226,13 @@ class TradeBoy:
         params (Dictionary) - Optional params able to change
                             - {"fastperiod": 9, "slowperiod": 12, "signalperiod": 3}
         """
-        _, _, _, _, close, _ = self._candleboy.ohlcv(
-            self._exchange, symbol, tf)
+        _, _, _, _, close, _ = self._indicator_client.ohlcv(
+            self.exchange, symbol, tf)
 
         if not params:
-            return self._candleboy.macd(close)
+            return self._indicator_client.macd(close)
         else:
-            return self._candleboy.macd(close, **params)
+            return self._indicator_client.macd(close, **params)
 
     def ema(self, symbol, tf, params=None):
         """Returns the Moving Average Convergence Divergence indicator values
@@ -124,92 +242,37 @@ class TradeBoy:
         params (Dictionary) - Optional params able to change
                             - {"timeperiod": 20}
         """
-        _, _, _, _, close, _ = self._candleboy.ohlcv(
-            self._exchange, symbol, tf)
+        _, _, _, _, close, _ = self._indicator_client.ohlcv(
+            self.exchange, symbol, tf)
 
         if not params:
-            return self._candleboy.ema(close)
+            return self._indicator_client.ema(close)
         else:
-            return self._candleboy.ema(close, **params)
+            return self._indicator_client.ema(close, **params)
 
 # ------------------------------ Client Methods ------------------------------ #
+
+    def _spot_engine(self):
+        """Initiates trades within the spot market"""
+        pass
 
     def engine(self, Strategy, limit=100):
         """Runs the strategy
 
         Strategy (Class) - Separate module created by client (see docs)
-        limit (Int) - How many times the engine should run strategy
+        limit (Int) - How many times the engine should run strategy (defaults at 100)
         """
         strategy = Strategy()
-        props = strategy.props
-        stats = {"wins": 0, "losses": 0, "profit": 0}
-        starting_balance = self.balance('USD', strategy.props['code'])
-        entry = None
-        params = None
         i = 0
 
         while i <= limit:
-
-            while not strategy.entry():
-                print('\nLooking for entry...\n')
-                print(
-                    f'Stats\n-------\nWins: {stats["wins"]}\nLosses: {stats["losses"]}\nProfit: {stats["profit"]}%\nTrades: {i}')
-                sleep(20)
-
+            # Find entry
+            self._entry_engine(strategy)
             # Entry found
-            params = strategy.params
-
-            while not self._in_trade:
-                if strategy.code == 'future':
-                    if params['side'] == 'long':
-                        # Open long position
-                        self._client.long(
-                            symbol=props['symbol'], type=params['type'], amount=params['amount'], price=params['price'], sl=params['sl'], tp=params['tp'])
-                        self._in_trade = True
-                        entry = self.price(props['symbol'])
-
-                    elif params['side'] == 'short':
-                        # Open short position
-                        self._client.short(
-                            symbol=props['symbol'], type=params['type'], amount=params['amount'], price=params['price'], sl=params['sl'], tp=params['tp'])
-                        self._in_trade = True
-                        entry = self.price(props['symbol'])
-
-            while self._in_trade:
-                price = self.price(props['symbol'])
-                tp = params['tp']
-                sl = params['sl']
-                side = params['side']
-                balance = round(self.balance('USD', code='future'), 2)
-
-                print(
-                    f'\nIn Trade\n-------\nside: {side}\nBalance: ${balance}\nPrice: ${price}\nEntry: ${entry}\nTP: ${tp}\nSL: ${sl}\n')
-                print(
-                    f'Stats\n-------\nWins: {stats["wins"]}\nLosses: {stats["losses"]}\nProfit: {stats["profit"]}%\nTrades: {i}')
-
-                if side == 'long':
-                    if price >= tp and not self.in_position(symbol=props['symbol']):
-                        self._in_trade = False
-                        stats["wins"] += 1
-                        stats["profit"] += 0.20
-
-                    if price <= sl and not self.in_position(symbol=props['symbol']):
-                        self._in_trade = False
-                        stats["losses"] += 1
-                        stats["profit"] -= 0.10
-
-                if side == 'short':
-                    if price <= tp and not self.in_position(symbol=props['symbol']):
-                        self._in_trade = False
-                        stats["wins"] += 1
-                        stats["profit"] += 0.20
-                    if price >= sl and not self.in_position(symbol=props['symbol']):
-                        self._in_trade = False
-                        stats["losses"] += 1
-                        stats["profit"] -= 0.10
-
-                sleep(20)
+            self._info_collect(strategy)
+            # Run market engine
+            code = self.info['code']
+            if code == 'future':
+                self._future_engine()
+            # Next trade
             i += 1
-            print(
-                f'\nStats\n-------\nWins: {stats["wins"]}\nLosses: {stats["losses"]}\nProfit: {stats["profit"]}%\nTrades: {i}\n')
-            sleep(10)
