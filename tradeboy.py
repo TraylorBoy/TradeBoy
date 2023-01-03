@@ -8,11 +8,15 @@ from phemexboy import PhemexBoy
 from dotenv import load_dotenv
 load_dotenv()
 
-# TODO: Error handling
+# TODO: Error handling (CODES?)
 # TODO: Spot engine
 # TODO: Create unified symbol for both spot and future
 # TODO: Fix docstrings
 # TODO: Add logger
+# TODO: GUI
+# TODO: Figure out how to not double init (in strategy and to use engine) - Class methods?
+# TODO: Add CoinbaseBoy
+# TODO: Add more indicators - Test more strategies (will have to work on CandleBoy as well)
 
 
 class TradeBoy:
@@ -27,12 +31,12 @@ class TradeBoy:
         self.exchange = exchange
         self.stats = {'wins': 0, 'losses': 0, 'profit': 0, 'trades': 0}
         self.info = {}
-        # Connect to exchange
-        self._load()
+        # Connect to necessary clients
+        self._connect()
 
 # ------------------------------- Class Methods ------------------------------ #
 
-    def _load(self):
+    def _connect(self):
         """Connects to exchange client endpoint"""
         # Connect to indicator client
         self._indicator_client = CandleBoy()
@@ -263,9 +267,8 @@ class TradeBoy:
         limit (Int) - How many times the engine should run strategy (defaults at 100)
         """
         strategy = Strategy()
-        i = 0
 
-        while i <= limit:
+        while self.stats['trades'] <= limit:
             # Find entry
             self._entry_engine(strategy)
             # Entry found
@@ -275,4 +278,4 @@ class TradeBoy:
             if code == 'future':
                 self._future_engine()
             # Next trade
-            i += 1
+            self.stats['trades'] += 1
