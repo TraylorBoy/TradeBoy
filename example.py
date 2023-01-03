@@ -6,6 +6,8 @@ from tradeboy import TradeBoy
 # Long if price above 200 EMA and MACD crosses below 0
 # Short if price below 200 EMA and MACD crosses above 0
 
+# TODO: Adjust tp/sl
+
 
 class Strategy(TradeBoy):
     def __init__(self):

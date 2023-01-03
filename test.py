@@ -3,7 +3,7 @@
 from example import Strategy
 
 from tradeboy import TradeBoy
-client = TradeBoy(exchange='phemex')
+client = TradeBoy(exchange='phemex', silent=False)
 
 # TODO: Test errors
 

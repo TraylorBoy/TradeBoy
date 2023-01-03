@@ -10,25 +10,30 @@ load_dotenv()
 
 # TODO: Error handling (CODES?)
 # TODO: Spot engine
+# TODO: exit engine
 # TODO: Create unified symbol for both spot and future
 # TODO: Fix docstrings
-# TODO: Add logger
 # TODO: GUI
 # TODO: Figure out how to not double init (in strategy and to use engine) - Class methods?
 # TODO: Add CoinbaseBoy
 # TODO: Add more indicators - Test more strategies (will have to work on CandleBoy as well)
+# TODO: Add exit condition to future engine
+# TODO: Test different sleep params
+# TODO: Add log messages
+# TODO: Make strategy repo
 
 
 class TradeBoy:
     EXCHANGES = ['phemex']
     CODES = ['spot', 'future', 'buy', 'sell', 'long', 'short']
 
-    def __init__(self, exchange):
+    def __init__(self, exchange, silent=True):
         if exchange not in self.EXCHANGES:
             raise Exception(f'{exchange} is not supported')
 
         # Setup class properties
         self.exchange = exchange
+        self.silent = silent
         self.stats = {'wins': 0, 'losses': 0, 'profit': 0, 'trades': 0}
         self.info = {}
         # Connect to necessary clients
@@ -47,20 +52,24 @@ class TradeBoy:
 
     def _log_trade_info(self):
         """Outputs trade information"""
+        self._log_info()
+        self._log_stats()
+
+    def _log_info(self):
+        """Output info"""
         side = self.info['side']
         symbol = self.info['symbol']
         amount = self.info['amount']
         sl = self.info['sl']
         tp = self.info['tp']
         code = self.info['code']
-        entry = self.stats['entry']
+        entry = self.info['entry']
 
         price = self.price(symbol)
         balance = round(self.balance('USD', code), 2)
 
-        print(
+        self._log(
             f'\nTrade Information\n----------\nSide: {side}\nBalance: ${balance}\nPrice: ${price}\nEntry: ${entry}\nTP: ${tp}\nSL: ${sl}\nAmount: {amount}')
-        self._log_stats()
 
     def _log_stats(self):
         """Displays stats to output"""
@@ -69,7 +78,7 @@ class TradeBoy:
         profit = round(self.stats['profit'], 2)
         trades = self.stats['trades']
 
-        print(
+        self._log(
             f'\nStats\n-------\nWins: {wins}\nLosses: {losses}\nProfit: {profit} (USD)\nTrades: {trades}\n')
 
     def _open_position(self, side, symbol, type, amount, price, sl, tp):
@@ -77,18 +86,19 @@ class TradeBoy:
         if side == 'long':
             # Open long position
             self._client.long(symbol, type, amount, price, sl, tp)
-            self.intro['entry'] = self.price(symbol)
 
         elif side == 'short':
             # Open short position
             self._client.short(symbol, type, amount, price, sl, tp)
-            self.info['entry'] = self.price(symbol)
 
     def _calculate_profit(self):
         """Returns current profit or loss"""
         code = self.info['code']
         starting_bal = self.info['balance']
         bal = self.balance('USD', code)
+
+        # Update bal
+        self.info['balance'] = bal
 
         if starting_bal > bal:
             return round(starting_bal - bal, 2)
@@ -130,13 +140,15 @@ class TradeBoy:
         tp = self.info['tp']
         type = self.info['type']
 
-        while not self.in_position(symbol):
+        if not self.in_position(symbol):
             self._open_position(side, symbol, type, amount, price, sl, tp)
+            self.info['entry'] = self.price(symbol)
 
         while self.in_position(symbol):
             self._log_trade_info()
-            self._close_position(symbol, side, tp, sl)
             sleep(20)
+
+        self._close_position(symbol, side, tp, sl)
 
     def _info_collect(self, strategy):
         """Sets info data from strategy
@@ -158,6 +170,10 @@ class TradeBoy:
             self._log_stats()
             sleep(20)
 
+    def _log(self, message):
+        """Logs message to output"""
+        if not self.silent:
+            print(message)
 
 # ------------------------------ Helper Methods ------------------------------ #
 
@@ -269,13 +285,13 @@ class TradeBoy:
         strategy = Strategy()
 
         while self.stats['trades'] <= limit:
-            # Find entry
-            self._entry_engine(strategy)
-            # Entry found
-            self._info_collect(strategy)
-            # Run market engine
             code = self.info['code']
             if code == 'future':
+                # Find entry
+                self._entry_engine(strategy)
+                # Entry found
+                self._info_collect(strategy)
+                # Run market engine
                 self._future_engine()
             # Next trade
             self.stats['trades'] += 1
