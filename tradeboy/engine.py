@@ -6,11 +6,11 @@ import datetime
 from time import sleep
 from candleboy import CandleBoy
 from phemexboy import PhemexBoy
-from dotenv import load_dotenv  # Dependancy = python-dotenv
+from dotenv import load_dotenv
 load_dotenv()
 
-# TODO: Refactor (x)
-# TODO: Error handling (CODES?)
+# TODO: Refactor - Seperate classes (X)
+# TODO: Error handling - CODES?
 # TODO: Spot engine - Wait for more investment opportunities
 # TODO: exit engine
 # TODO: Create unified symbol for both spot and future
@@ -27,35 +27,20 @@ load_dotenv()
 # TODO: Add SLEEP_TIME variable
 # TODO: Add change_account for future if exchange allows sub accounts
 # TODO: Add avg time in position
+# TODO: Fix tests - test EVERY METHOD
 
 
 class TradeBoy:
-    EXCHANGES = ['phemex']
     CODES = ['spot', 'future', 'buy', 'sell', 'long', 'short']
 
     def __init__(self, exchange, silent=True):
-        if exchange not in self.EXCHANGES:
-            raise Exception(f'{exchange} is not supported')
-
         # Setup class properties
         self.exchange = exchange
         self.silent = silent
         self.stats = {'wins': 0, 'losses': 0, 'profit': 0, 'trades': 0}
         self.info = {}
-        # Connect to necessary clients
-        self._connect()
 
 # ------------------------------- Class Methods ------------------------------ #
-
-    def _connect(self):
-        """Connects to exchange client endpoint"""
-        self._log(f'Connecting to {self.exchange}')
-        # Connect to indicator client
-        self._indicator_client = CandleBoy()
-        # Connect to exchange client
-        if self.exchange == 'phemex':
-            self._client = PhemexBoy(
-                os.getenv('PHEMEX_KEY'), os.getenv('PHEMEX_SECRET'))
 
     def _log_trade_info(self):
         """Outputs trade information"""
@@ -238,32 +223,6 @@ class TradeBoy:
             print(message)
 
 # ------------------------------ Helper Methods ------------------------------ #
-
-    def balance(self, of, code='spot'):
-        """Retrieve balance from specific account
-
-        of (String) - Asset to retrieve balance for
-        code (String) - Values should be either spot or future to indicate which
-        account to retrieve balance for (default is swap due to not every
-        exchange having a future option)
-        """
-        bal = None
-
-        if code == 'spot':
-            bal = self._client.balance(of)
-        elif code == 'future':
-            bal = self._client.future_balance(of)
-        else:
-            raise Exception('Invalid code')
-
-        return bal
-
-    def price(self, symbol):
-        """Returns the last price of symbol
-
-        symbol (String) - Trading pair
-        """
-        return self._client.price(symbol)
 
     def in_position(self, symbol):
         """Returns True if in position for symbol, false otherwise

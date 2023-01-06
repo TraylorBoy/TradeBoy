@@ -1,9 +1,11 @@
 """Tests the TradeBoy Module"""
 
+from tests import test_client
+
 from example import Strategy
 
 from tradeboy import TradeBoy
-client = TradeBoy(exchange='phemex', silent=False)
+# client = TradeBoy(exchange='phemex', silent=False)
 
 # TODO: Test errors
 
@@ -86,5 +88,7 @@ if __name__ == '__main__':
     # test_ema()
     # test_position_status()
     # test_percent()
-    test_engine()
+    # test_engine()
+    if not test_client.test_all():
+        print('Client test failed')
     print('All tests passed')
