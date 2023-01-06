@@ -6,8 +6,6 @@ from tradeboy import TradeBoy
 # Long if price above 200 EMA and MACD crosses below 0
 # Short if price below 200 EMA and MACD crosses above 0
 
-# TODO: Adjust tp/sl
-
 
 class Strategy(TradeBoy):
     def __init__(self):
@@ -21,12 +19,11 @@ class Strategy(TradeBoy):
         }
         # Params needed to initiate trade
         self.params = {
-            'type': 'market',  # Or limit
-            'price': None,  # Don't need price for market order
+            'type': 'limit',  # Or limit
             'side': None,  # long or short
-            'amount': 14,  # How many contracts to trade with
-            'tp': None,  # Take profit price
-            'sl': None  # Stop loss price
+            'amount': 5,  # How many contracts to trade with
+            'tp': None,  # Take profit percent
+            'sl': None  # Stop loss percent
         }
 
     def get_macd(self):
@@ -86,25 +83,24 @@ class Strategy(TradeBoy):
         price = self.price(symbol=self.props['symbol'])
         prev_macd, last_macd, prev_signal, last_signal = self.get_macd()
         curr_ema = self.get_ema()
+        # Debug
+        """print(
+            f'\nPREV_MACD: {prev_macd}\nPREV_SIGNAL: {prev_signal}\nLAST_MACD: {last_macd}\nLAST_SIGNAL: {last_signal}\nEMA: {curr_ema}\n')"""
 
         # Check for entry
         if price > curr_ema:
             # Look for long
             if last_macd < last_signal and prev_macd > prev_signal and prev_macd < 0 and prev_signal < 0:
-                self.params['tp'] = self.profit_percent(
-                    symbol=self.props['symbol'], percent=0.2, side='long')
-                self.params['sl'] = self.loss_percent(
-                    symbol=self.props['symbol'], percent=0.1, side='long')
+                self.params['tp'] = 0.36  # 0.36%
+                self.params['sl'] = 0.18  # 0.18%
                 self.params['side'] = 'long'
                 return True
 
         if price < curr_ema:
             # Look for short
             if last_macd > last_signal and prev_macd < prev_signal and prev_macd > 0 and prev_signal > 0:
-                self.params['tp'] = self.profit_percent(
-                    symbol=self.props['symbol'], percent=0.2, side='short')
-                self.params['sl'] = self.loss_percent(
-                    symbol=self.props['symbol'], percent=0.1, side='short')
+                self.params['tp'] = 0.36
+                self.params['sl'] = 0.18
                 self.params['side'] = 'short'
                 return True
 
