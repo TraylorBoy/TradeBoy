@@ -1,36 +1,31 @@
 """Example Future Strategy (No Exit)"""
 
-from tradeboy import TradeBoy
-
 # Strategy: 1m MACDEMA
 # Long if price above 200 EMA and MACD crosses below 0
 # Short if price below 200 EMA and MACD crosses above 0
 
+from tradeboy.tools import Tools
 
-class Strategy(TradeBoy):
+class Strategy:
     def __init__(self):
-        # Set exchange
-        super().__init__(exchange='phemex')
-        # Required properties
-        self.props = {
-            'code': 'future',  # Or spot
-            'symbol': 'BTC/USD:USD',  # Trading pair
-            'tf': '1m'  # Timeframe
-        }
-        # Params needed to initiate trade
+        # Helper class
+        self.tools = Tools(exchange='phemex', verbose=True)
+        # Required params needed to initiate trade
         self.params = {
-            'type': 'limit',  # Or limit
+            'type': 'market',  # Or limit
             'side': None,  # long or short
-            'amount': 5,  # How many contracts to trade with
+            'amount': 1,  # How many contracts to trade with
             'tp': None,  # Take profit percent
-            'sl': None  # Stop loss percent
+            'sl': None,  # Stop loss percent
+            'symbol': self.tools.symbol(base='BTC', quote='USD', code='future'), # Trading pair,
+            'exit': False # Exit signal
         }
 
     def get_macd(self):
         # Get macd values
         # Use default params (12, 26, 9)
-        macd, signal, _ = self.macd(
-            symbol=self.props['symbol'], tf=self.props['tf'])
+        _, _, _, _, close, _ = self.tools.ohlcv(self.params['symbol'], '1m')
+        macd, signal, _ = self.tools.macd(close)
         # Format
         macd = list(macd)
         macd.reverse()
@@ -64,10 +59,13 @@ class Strategy(TradeBoy):
     def get_ema(self):
         # Get ema value
         # Use default timeperiod = 200
-        ema = self.ema(symbol=self.props['symbol'], tf=self.props['tf'])
+        _, _, _, _, close, _ = self.tools.ohlcv(self.params['symbol'], '1m')
+        ema = self.tools.ema(close)
+
         # Format
         ema = list(ema)
         ema.reverse()
+
         # Get current value
         curr_ema = None
 
@@ -80,7 +78,7 @@ class Strategy(TradeBoy):
 
     def signal(self):
         # Get strategy params
-        price = self.price(symbol=self.props['symbol'])
+        price = self.tools.price(symbol=self.params['symbol'])
         prev_macd, last_macd, prev_signal, last_signal = self.get_macd()
         curr_ema = self.get_ema()
         # Debug
@@ -109,7 +107,6 @@ class Strategy(TradeBoy):
     # Entry is required
     # Exit is not required if no tp/sl provided
     def entry(self):
-        # Set strategy params
         # Returns True if signal was found
         # False if signal was not found
         return self.signal()
