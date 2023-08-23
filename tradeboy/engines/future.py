@@ -2,19 +2,42 @@
 
 from phemexboy.proxy import Proxy
 from tradeboy.helpers.utility import sync
+from tradeboy.helpers.calc import take_profit, stop_loss
+from tradeboy.helpers.exceptions import InvalidParamError
 from time import sleep
 
-# TODO: Add error handling
+# TODO: Add cleanup method (make sure no position open)
 # TODO: Exit strategy, limit
-# TODO: Refactor
-# TODO: Better logging
+# TODO: Add stats
+# TODO: Keep running after timeout error
+# TODO: Send logs to phone
 
 class FutureEngine:
   def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False):
-    self._strategy = Strategy()
-    self._rate = rate # Request rate
-    self._verbose = verbose
-    self._proxy = Proxy(verbose)
+    try:
+      self._strategy = Strategy()
+      self._proxy = Proxy(verbose=verbose)
+    except Exception as e:
+      print(f'Failed to initialize engine: \n{e}')
+    finally:
+      self._rate = rate # Request rate
+      self._verbose = verbose
+      self._trade_stats = {
+        "trade": 1,
+        "wins": 0,
+        "losses": 0
+      }
+      self._position_stats = {
+        "entry": 0,
+        "tp": 0,
+        "sl": 0
+      }
+      self._wallet = {
+        "balance": 0,
+        "profit": 0,
+        "loss": 0,
+      }
+      self._log('Engine initialized...')
 
 # ------------------------------- Class Methods ------------------------------ #
 
@@ -28,7 +51,180 @@ class FutureEngine:
     if self._verbose:
         print(msg, end=end)
 
+  def _find_entry(self):
+    """Waits for strategy entry
+
+    Raises:
+      Exception: Failed to find entry
+    """
+    try:
+      # Wait until strategy finds entry signal
+      while not self._strategy.entry():
+        # TODO: Output stats
+        sleep(self._rate)
+    except Exception as e:
+      print('Failed to find entry...')
+      raise
+
+  def _open_position(self):
+    """Open a position
+
+    Raises:
+      Exception: Failed to place market order
+      Exception: Failed to place limit order
+      InvalidParamError: type can only be limit or market
+
+    Returns
+      OrderClient: Order object
+    """
+    type_of_trade = self._strategy.params['type']
+
+    # Place either market or limit order
+    if type_of_trade == 'market':
+      try:
+        self._log('Placing a market order...')
+        return self._open_market_trade()
+      except Exception as e:
+        print('Failed to place market order')
+        raise
+    elif type_of_trade == 'limit':
+      try:
+        self._log('Placing a limit order...')
+        return self._open_limit_trade()
+      except Exception as e:
+        print('Failed to place limit order')
+        raise
+    else:
+      raise InvalidParamError('type can only be limit or market')
+
+  def _open_market_trade(self):
+    """Places a market order
+
+    Raises:
+      Exception: Failed to calculate tp/sl
+      Exception: Failed to place long order
+      Exception: Failed to place short order
+
+    Returns
+      OrderClient: Order object
+    """
+    type_of_trade = self._strategy.params['type']
+    side = self._strategy.params['side']
+    amount = self._strategy.params['amount']
+    tp_percent = self._strategy.params['tp_percent']
+    sl_percent = self._strategy.params['sl_percent']
+    symbol = self._strategy.params['symbol']
+
+    try:
+      # Calculate tp and sl
+      self._log('Calculating take profit and stop loss prices...')
+      price = self._proxy.price(symbol)
+      tp = take_profit(side, price, tp_percent)
+      sl = stop_loss(side, price, sl_percent)
+      self._log(f'\nTake Profit: {tp}\nStop Loss: {sl}\n')
+    except Exception as e:
+      print('Failed to calculate tp/sl')
+      raise
+
+    # Place order
+    if side == 'long':
+      try:
+        self._log('Opening a long position...')
+        return self._proxy.long(symbol, type_of_trade, amount, sl=sl, tp=tp)
+      except Exception as e:
+        print('Failed to place long order')
+        raise
+    elif side == 'short':
+      try:
+        self._log('Opening a short position...')
+        return self._proxy.short(symbol, type_of_trade, amount, sl=sl, tp=tp)
+      except Exception as e:
+        print('Failed to place short order')
+        raise
+    else:
+      raise InvalidParamError('side can only be long or short')
+
+  # TODO
+  def _open_limit_trade(self):
+    pass
+
+  def _manage_position(self):
+    """Manage open position
+
+    Raises
+      Exception: Failed to close position
+      Exception: Failed to find exit strategy
+      InvalidParamError: exit must be either True or False
+    """
+    exit_strategy = self._strategy.params['exit']
+    # Check if there is an exit strategy already in place
+    # If not then waits for tp/sl to get hit
+    if not exit_strategy:
+      try:
+        self._close_position()
+      except Exception as e:
+        print('Failed to close position')
+    elif exit_strategy:
+      try:
+        self._find_exit()
+      except Exception as e:
+        print('Failed to find exit strategy')
+    else:
+      raise InvalidParamError('exit must be either True or False')
+
+  def _close_position(self):
+    """Waits for position to be closed
+
+    Raises:
+      Exception: Failed to retrieve position
+      Exception: Failed to close position
+    """
+    symbol = self._strategy.params['symbol']
+
+    try:
+      # Get open position
+      self._log('Retrieving position...')
+      position = self._proxy.position(symbol)
+      self._log(f'Position found: \n{position}')
+    except Exception as e:
+      print('Failed to retrieve position')
+      raise
+
+    try:
+      # Wait for position to be closed
+      self._log('Waiting for position to be closed...')
+      while not position._check_closed():
+        # TODO: Output stats
+        sleep(self._rate)
+    except Exception as e:
+      print('Failed to check if position was closed')
+      raise
+
+  # TODO
+  def _find_exit(self):
+    pass
+
 # ------------------------------ Client Methods ------------------------------ #
+
+  def verbose(self):
+      """Turn on logging"""
+      self._verbose = True
+
+  def silent(self):
+      """Turn off logging"""
+      self._verbose = False
+
+  def trade_stats(self):
+    """Output stats"""
+    print(f'\nTrade: {self._trade_stats["trade"]}\nWins: {self._trade_stats["wins"]}\nLosses: {self._trade_stats["losses"]}\n')
+
+  def position_stats(self):
+    """Output position stats"""
+    print(f'\nPrice: {self._proxy(self._strategy.params["symbol"])}\nEntry: {self._position_stats["entry"]}\nTake Profit: {self._position_stats["tp"]}\nStop Loss: {self._position_stats["sl"]}\n')
+
+  def wallet(self):
+    """Output wallet information"""
+    print(f'\nBalance: {self._wallet["balance"]}\nProfit: {self._wallet["profit"]}\nLoss: {self._wallet["loss"]}\n')
 
   def run(self, trades: int = 1):
     """Run the strategy
@@ -36,81 +232,32 @@ class FutureEngine:
     Args:
         trades (int, optional): Total number of trades to run. Defaults to 1.
     """
-    # Wait until next minute
-    self._log('Syncing...', ',')
-    sync()
-    self._log('done.')
-
     trade = 1
     while trade <= trades:
-      self._log(f'Current trade: {trade}')
-
-      # Find entry
-      while not self._strategy.entry():
+      try:
+        # Wait until next minute
+        self._log('Syncing...')
+        sync()
+        # Find entry
+        self._log(f'\nCurrent trade: {trade}\n')
         self._log('Finding entry...')
-        sleep(self._rate)
-
-      # Entry found
-      type_of_trade = self._strategy.params['type']
-      side = self._strategy.params['side']
-      amount = self._strategy.params['amount']
-      tp = self._strategy.params['tp']
-      sl = self._strategy.params['sl']
-      symbol = self._strategy.params['symbol']
-      exit_strategy = self._strategy.params['exit']
-
-      # Open position
-      order = None
-      position = None
-
-      self._log('Opening position...')
-      if type_of_trade == 'market':
-        if side == 'long':
-          # Calculate tp and sl
-          price = self._proxy.price(symbol)
-          sl = price - (price * sl)
-          tp = price + (price * tp)
-
-          order = self._proxy.long(symbol, type_of_trade, amount, sl, tp)
-        elif side == 'short':
-          # Calculate tp and sl
-          price = self._proxy.price(symbol)
-          sl = price + (price * sl)
-          tp = price - (price * tp)
-
-          order = self._proxy.short(symbol, type_of_trade, amount, sl, tp)
-        else:
-          # TODO: Error handling
-          pass
-
-        # Get position data
-        self._log(f'Retrieved order {order}')
+        self._find_entry()
+        # Open position
+        self._log('Opening a position...')
+        order = self._open_position()
+        self._log(f'Order found: \{order}')
+        # Check if order was closed
+        self._log('Checking if order was closed...')
         if order.closed():
-          position = self._proxy.position(symbol)
-          self._log(f'Retrieved position {position}')
-      elif type_of_trade == 'limit':
-        pass
-      else:
-        # TODO: Error handling
-        pass
-
-      # Manage open position
-      if not exit_strategy:
-        # Wait for position to be closed
-        while not position._check_closed():
-          self._log('Waiting for position to be closed...')
-          sleep(self._rate)
-      else:
-        # TODO: Exit strategy
-        pass
-
-      # Update trade data
-      trades += 1
-
-      def verbose(self):
-          """Turn on logging"""
-          self._verbose = True
-
-      def silent(self):
-          """Turn off logging"""
-          self._verbose = False
+          self._log(f'Order closed, position opened...')
+          # Mange open position
+          self._manage_position()
+        # Trade finished
+        # Update trade data
+        self._log('Trade complete, updating trade data...')
+        trade += 1
+      except InvalidParamError as e:
+        print('Strategy contains invalid params: \n{e}')
+      except Exception as e:
+        print('Error while running strategy: \n{e}')
+        # TODO: Cleanup method

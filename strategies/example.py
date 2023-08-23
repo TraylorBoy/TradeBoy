@@ -9,14 +9,14 @@ from tradeboy.tools import Tools
 class Strategy:
     def __init__(self):
         # Helper class
-        self.tools = Tools(exchange='phemex', verbose=True)
+        self.tools = Tools(exchange='phemex', verbose=False)
         # Required params needed to initiate trade
         self.params = {
             'type': 'market',  # Or limit
             'side': None,  # long or short
             'amount': 1,  # How many contracts to trade with
-            'tp': None,  # Take profit percent
-            'sl': None,  # Stop loss percent
+            'tp_percent': None,  # Take profit percent
+            'sl_percent': None,  # Stop loss percent
             'symbol': self.tools.symbol(base='BTC', quote='USD', code='future'), # Trading pair,
             'exit': False # Exit signal
         }
@@ -24,7 +24,7 @@ class Strategy:
     def get_macd(self):
         # Get macd values
         # Use default params (12, 26, 9)
-        _, _, _, _, close, _ = self.tools.ohlcv(self.params['symbol'], '1m')
+        _, _, _, _, close, _ = self.tools.ohlcv(symbol=self.params['symbol'], tf='1m')
         macd, signal, _ = self.tools.macd(close)
         # Format
         macd = list(macd)
@@ -59,7 +59,7 @@ class Strategy:
     def get_ema(self):
         # Get ema value
         # Use default timeperiod = 200
-        _, _, _, _, close, _ = self.tools.ohlcv(self.params['symbol'], '1m')
+        _, _, _, _, close, _ = self.tools.ohlcv(symbol=self.params['symbol'], tf='1m')
         ema = self.tools.ema(close)
 
         # Format
@@ -81,24 +81,21 @@ class Strategy:
         price = self.tools.price(symbol=self.params['symbol'])
         prev_macd, last_macd, prev_signal, last_signal = self.get_macd()
         curr_ema = self.get_ema()
-        # Debug
-        """print(
-            f'\nPREV_MACD: {prev_macd}\nPREV_SIGNAL: {prev_signal}\nLAST_MACD: {last_macd}\nLAST_SIGNAL: {last_signal}\nEMA: {curr_ema}\n')"""
 
         # Check for entry
         if price > curr_ema:
             # Look for long
             if last_macd < last_signal and prev_macd > prev_signal and prev_macd < 0 and prev_signal < 0:
-                self.params['tp'] = 0.36  # 0.36%
-                self.params['sl'] = 0.18  # 0.18%
+                self.params['tp_percent'] = 0.36  # 0.36%
+                self.params['sl_percent'] = 0.18  # 0.18%
                 self.params['side'] = 'long'
                 return True
 
         if price < curr_ema:
             # Look for short
             if last_macd > last_signal and prev_macd < prev_signal and prev_macd > 0 and prev_signal > 0:
-                self.params['tp'] = 0.36
-                self.params['sl'] = 0.18
+                self.params['tp_percent'] = 0.36
+                self.params['sl_percent'] = 0.18
                 self.params['side'] = 'short'
                 return True
 
