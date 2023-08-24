@@ -4,6 +4,7 @@ from phemexboy.proxy import Proxy
 from candleboy.core import CandleBoy
 
 # TODO: Error handling
+# TODO: Tests
 
 class Tools:
   def __init__(self, exchange: str, verbose: bool = False):
@@ -67,3 +68,11 @@ class Tools:
     https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
     """
     return self.candle.ema(close, timeperiod)
+
+  def stoch(self, high: list, low: list, close: list, fastk_period: int = 5, slowk_period: int = 3, slowk_matype: int = 0, slowd_period: int = 3, slowd_matype: int = 0):
+    """Returns the Stochastic indicator values
+
+    See TA-Lib docs for details on parameters.
+    https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
+    """
+    return self.candle.stoch(high, low, close, fastk_period, slowk_period, slowk_matype, slowd_period, slowd_matype)

@@ -8,15 +8,18 @@ from time import sleep
 
 # TODO: Add cleanup method (make sure no position open)
 # TODO: Exit strategy, limit
-# TODO: Add stats
 # TODO: Keep running after timeout error
-# TODO: Send logs to phone
+# TODO: Send logs to discord
+# TODO: trailing stop loss
+# TODO: Tools error handling and tests
 
 class FutureEngine:
   def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False):
+    usd_balance = 0
     try:
       self._strategy = Strategy()
       self._proxy = Proxy(verbose=verbose)
+      usd_balance = self._proxy.balance(currency='USD', code='future')
     except Exception as e:
       print(f'Failed to initialize engine: \n{e}')
     finally:
@@ -33,9 +36,8 @@ class FutureEngine:
         "sl": 0
       }
       self._wallet = {
-        "balance": 0,
-        "profit": 0,
-        "loss": 0,
+        "balance": usd_balance,
+        "pnl": 0,
       }
       self._log('Engine initialized...')
 
@@ -60,7 +62,6 @@ class FutureEngine:
     try:
       # Wait until strategy finds entry signal
       while not self._strategy.entry():
-        # TODO: Output stats
         sleep(self._rate)
     except Exception as e:
       print('Failed to find entry...')
@@ -125,6 +126,10 @@ class FutureEngine:
     except Exception as e:
       print('Failed to calculate tp/sl')
       raise
+    finally:
+      self._position_stats['entry'] = price
+      self._position_stats['tp'] = tp
+      self._position_stats['sl'] = sl
 
     # Place order
     if side == 'long':
@@ -164,11 +169,13 @@ class FutureEngine:
         self._close_position()
       except Exception as e:
         print('Failed to close position')
+        raise
     elif exit_strategy:
       try:
         self._find_exit()
       except Exception as e:
         print('Failed to find exit strategy')
+        raise
     else:
       raise InvalidParamError('exit must be either True or False')
 
@@ -194,7 +201,7 @@ class FutureEngine:
       # Wait for position to be closed
       self._log('Waiting for position to be closed...')
       while not position._check_closed():
-        # TODO: Output stats
+        self.view_position_stats()
         sleep(self._rate)
     except Exception as e:
       print('Failed to check if position was closed')
@@ -203,6 +210,31 @@ class FutureEngine:
   # TODO
   def _find_exit(self):
     pass
+
+  def _update_data(self):
+    """Update trade stats and wallet
+
+    Raises:
+      Exception - Failed to update wallet
+    """
+    self._trade_stats['trade'] += 1
+    prev_balance = self._wallet['balance']
+
+    try:
+      self._wallet['balance'] = self._proxy.balance(currency='USD', code='future')
+    except Exception as e:
+      print('Failed to update wallet')
+      raise
+    finally:
+      # Win
+      if prev_balance < self._wallet['balance']:
+        self._wallet['pnl'] += self._wallet['balance'] - prev_balance
+        self._trade_stats['wins'] += 1
+
+      # Loss
+      if prev_balance > self._wallet['balance']:
+        self._wallet['pnl'] += prev_balance - self._wallet['balance']
+        self._trade_stats['losses'] += 1
 
 # ------------------------------ Client Methods ------------------------------ #
 
@@ -214,17 +246,25 @@ class FutureEngine:
       """Turn off logging"""
       self._verbose = False
 
-  def trade_stats(self):
+  def view_trade_stats(self):
     """Output stats"""
     print(f'\nTrade: {self._trade_stats["trade"]}\nWins: {self._trade_stats["wins"]}\nLosses: {self._trade_stats["losses"]}\n')
 
-  def position_stats(self):
-    """Output position stats"""
-    print(f'\nPrice: {self._proxy(self._strategy.params["symbol"])}\nEntry: {self._position_stats["entry"]}\nTake Profit: {self._position_stats["tp"]}\nStop Loss: {self._position_stats["sl"]}\n')
+  def view_position_stats(self):
+    """Output position stats
 
-  def wallet(self):
+    Raises:
+      Exception - Failed to retrieve price and view position stats
+    """
+    try:
+      print(f'\nPrice: {self._proxy(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
+    except Exception as e:
+      print('Failed to retrieve price and view position stats')
+      raise
+
+  def view_wallet(self):
     """Output wallet information"""
-    print(f'\nBalance: {self._wallet["balance"]}\nProfit: {self._wallet["profit"]}\nLoss: {self._wallet["loss"]}\n')
+    print(f'\nBalance: ${self._wallet["balance"]}\nProfit/Loss: {self._wallet["pnl"]} (USD)\n')
 
   def run(self, trades: int = 1):
     """Run the strategy
@@ -232,14 +272,15 @@ class FutureEngine:
     Args:
         trades (int, optional): Total number of trades to run. Defaults to 1.
     """
-    trade = 1
-    while trade <= trades:
+
+    while self._trade_stats['trade'] <= trades:
       try:
         # Wait until next minute
         self._log('Syncing...')
         sync()
         # Find entry
-        self._log(f'\nCurrent trade: {trade}\n')
+        self.view_trade_stats()
+        self.view_wallet()
         self._log('Finding entry...')
         self._find_entry()
         # Open position
@@ -255,9 +296,10 @@ class FutureEngine:
         # Trade finished
         # Update trade data
         self._log('Trade complete, updating trade data...')
-        trade += 1
+        self._update_data()
       except InvalidParamError as e:
-        print('Strategy contains invalid params: \n{e}')
+        print(f'Strategy contains invalid params: \n{e}')
       except Exception as e:
-        print('Error while running strategy: \n{e}')
+        print(f'Error while running strategy: \n{e}')
+        break
         # TODO: Cleanup method

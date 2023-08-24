@@ -102,7 +102,7 @@ class Strategy:
         return False
 
     # Entry is required
-    # Exit is not required if no tp/sl provided
+    # Exit is not required if tp/sl percents provided
     def entry(self):
         # Returns True if signal was found
         # False if signal was not found
