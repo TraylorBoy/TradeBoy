@@ -226,14 +226,13 @@ class FutureEngine:
       print('Failed to update wallet')
       raise
     finally:
+      # Update profit and loss
+      self._wallet['pnl'] += self._wallet['balance'] - prev_balance
       # Win
       if prev_balance < self._wallet['balance']:
-        self._wallet['pnl'] += self._wallet['balance'] - prev_balance
         self._trade_stats['wins'] += 1
-
       # Loss
       if prev_balance > self._wallet['balance']:
-        self._wallet['pnl'] += prev_balance - self._wallet['balance']
         self._trade_stats['losses'] += 1
 
 # ------------------------------ Client Methods ------------------------------ #
