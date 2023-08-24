@@ -257,7 +257,7 @@ class FutureEngine:
       Exception - Failed to retrieve price and view position stats
     """
     try:
-      print(f'\nPrice: {self._proxy(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
+      print(f'\nPrice: {self._proxy.price(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
     except Exception as e:
       print('Failed to retrieve price and view position stats')
       raise
