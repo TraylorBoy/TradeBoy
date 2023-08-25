@@ -350,7 +350,7 @@ class FutureEngine:
           sl_percent = self._strategy.params['sl_percent']
           # Limit order
           # Will try to close order for 1 minute
-          if order.close(True, tries=60, sl_percent=sl_percent, tp_percent=tp_percent):
+          if order.close(True, wait=2, tries=30, sl_percent=sl_percent, tp_percent=tp_percent):
             self._log(f'Order closed, position opened...')
             # Mange open position
             self._manage_position()
