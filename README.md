@@ -4,7 +4,6 @@ Automated crypto trader
 ## Notes
 - Only exchange is Phemex so far
 - Only future engine works
-  - market orders work, not limit
   - exit condition not in yet
 
 ## Installation

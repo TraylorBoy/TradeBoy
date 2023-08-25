@@ -6,12 +6,13 @@ from tradeboy.helpers.calc import take_profit, stop_loss
 from tradeboy.helpers.exceptions import InvalidParamError
 from time import sleep
 
-# TODO: Add cleanup method (make sure no position open)
-# TODO: Exit strategy, limit
-# TODO: Keep running after timeout error
+# TODO: Add cleanup method (make sure no position/orders open)
+# TODO: Exit strategy
+# TODO: Keep running after timeout error?
 # TODO: Send logs to discord
 # TODO: trailing stop loss
 # TODO: Tools error handling and tests
+# TODO: Refactor
 
 class FutureEngine:
   def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False):
@@ -149,9 +150,56 @@ class FutureEngine:
     else:
       raise InvalidParamError('side can only be long or short')
 
-  # TODO
   def _open_limit_trade(self):
-    pass
+    """Places a limit order
+
+    Raises:
+      Exception: Failed to calculate tp/sl
+      Exception: Failed to place long order
+      Exception: Failed to place short order
+
+    Returns
+      OrderClient: Order object
+    """
+    type_of_trade = self._strategy.params['type']
+    side = self._strategy.params['side']
+    amount = self._strategy.params['amount']
+    tp_percent = self._strategy.params['tp_percent']
+    sl_percent = self._strategy.params['sl_percent']
+    symbol = self._strategy.params['symbol']
+    price = self._proxy.price(symbol)
+
+    try:
+      # Calculate tp and sl
+      self._log('Calculating take profit and stop loss prices...')
+      tp = take_profit(side, price, tp_percent)
+      sl = stop_loss(side, price, sl_percent)
+      self._log(f'\nTake Profit: {tp}\nStop Loss: {sl}\n')
+    except Exception as e:
+      print('Failed to calculate tp/sl')
+      raise
+    finally:
+      self._position_stats['entry'] = price
+      self._position_stats['tp'] = tp
+      self._position_stats['sl'] = sl
+
+    # Place order
+    if side == 'long':
+      try:
+        self._log('Opening a long position...')
+        return self._proxy.long(symbol, type_of_trade, amount, price=price, sl=sl, tp=tp)
+      except Exception as e:
+        print('Failed to place long order')
+        raise
+    elif side == 'short':
+      try:
+        self._log('Opening a short position...')
+        return self._proxy.short(symbol, type_of_trade, amount, price=price, sl=sl, tp=tp)
+      except Exception as e:
+        print('Failed to place short order')
+        raise
+    else:
+      raise InvalidParamError('side can only be long or short')
 
   def _manage_position(self):
     """Manage open position
@@ -288,14 +336,32 @@ class FutureEngine:
         self._log(f'Order found: \{order}')
         # Check if order was closed
         self._log('Checking if order was closed...')
+        # TODO: Refactor
         if order.closed():
           self._log(f'Order closed, position opened...')
           # Mange open position
           self._manage_position()
-        # Trade finished
-        # Update trade data
-        self._log('Trade complete, updating trade data...')
-        self._update_data()
+          # Trade finished
+          # Update trade data
+          self._log('Trade complete, updating trade data...')
+          self._update_data()
+        else:
+          tp_percent = self._strategy.params['tp_percent']
+          sl_percent = self._strategy.params['sl_percent']
+          # Limit order
+          # Will try to close order for 1 minute
+          if order.close(True, tries=60, sl_percent=sl_percent, tp_percent=tp_percent):
+            self._log(f'Order closed, position opened...')
+            # Mange open position
+            self._manage_position()
+            # Trade finished
+            # Update trade data
+            self._log('Trade complete, updating trade data...')
+            self._update_data()
+          else:
+            # Order failed to close
+            self._log('Order failed to close, cancelling...')
+            if order.pending(): order.cancel()
       except InvalidParamError as e:
         print(f'Strategy contains invalid params: \n{e}')
       except Exception as e:
