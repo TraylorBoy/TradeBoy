@@ -6,11 +6,9 @@ from tradeboy.helpers.calc import take_profit, stop_loss
 from tradeboy.helpers.exceptions import InvalidParamError
 from time import sleep
 
-# TODO: Add cleanup method (make sure no position/orders open)
+# TODO: Add cleanup method (make sure no position/orders open, keep running after)
 # TODO: Exit strategy
-# TODO: Keep running after timeout error?
 # TODO: Send logs to discord
-# TODO: trailing stop loss
 # TODO: Tools error handling and tests
 # TODO: Refactor
 
@@ -136,14 +134,14 @@ class FutureEngine:
     if side == 'long':
       try:
         self._log('Opening a long position...')
-        return self._proxy.long(symbol, type_of_trade, amount, sl=sl, tp=tp)
+        return self._proxy.long(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
       except Exception as e:
         print('Failed to place long order')
         raise
     elif side == 'short':
       try:
         self._log('Opening a short position...')
-        return self._proxy.short(symbol, type_of_trade, amount, sl=sl, tp=tp)
+        return self._proxy.short(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
       except Exception as e:
         print('Failed to place short order')
         raise
@@ -304,7 +302,7 @@ class FutureEngine:
       Exception - Failed to retrieve price and view position stats
     """
     try:
-      print(f'\nPrice: {self._proxy.price(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
+      print(f'\nPrice: ${self._proxy.price(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
     except Exception as e:
       print('Failed to retrieve price and view position stats')
       raise
@@ -368,3 +366,6 @@ class FutureEngine:
         print(f'Error while running strategy: \n{e}')
         break
         # TODO: Cleanup method
+    self.view_trade_stats()
+    self.view_wallet()
+
