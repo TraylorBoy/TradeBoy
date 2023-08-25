@@ -187,14 +187,14 @@ class FutureEngine:
     if side == 'long':
       try:
         self._log('Opening a long position...')
-        return self._proxy.long(symbol, type_of_trade, amount, price=price, sl=sl, tp=tp)
+        return self._proxy.long(symbol, type_of_trade, amount, price=price - 0.01, sl=sl, tp=tp)
       except Exception as e:
         print('Failed to place long order')
         raise
     elif side == 'short':
       try:
         self._log('Opening a short position...')
-        return self._proxy.short(symbol, type_of_trade, amount, price=price, sl=sl, tp=tp)
+        return self._proxy.short(symbol, type_of_trade, amount, price=price + 0.01, sl=sl, tp=tp)
       except Exception as e:
         print('Failed to place short order')
         raise
