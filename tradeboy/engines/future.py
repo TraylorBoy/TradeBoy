@@ -11,6 +11,7 @@ from discordwebhook import Discord
 # TODO: Exit strategy
 # TODO: Tools error handling and tests
 # TODO: Refactor
+# TODO: Add post to errors
 
 class FutureEngine:
   def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False, webhook: str = None):
@@ -116,7 +117,7 @@ class FutureEngine:
       Exception: Failed to place short order
 
     Returns
-      OrderClient: Order object
+      Tuple: OrderClient, None
     """
     type_of_trade = self._strategy.params['type']
     side = self._strategy.params['side']
@@ -129,14 +130,14 @@ class FutureEngine:
     if side == 'long':
       try:
         self._log('Opening a long position...')
-        return self._proxy.long(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
+        return self._proxy.long(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent)), None
       except Exception as e:
         print('Failed to place long order')
         raise
     elif side == 'short':
       try:
         self._log('Opening a short position...')
-        return self._proxy.short(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
+        return self._proxy.short(symbol, type_of_trade, amount, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent)), None
       except Exception as e:
         print('Failed to place short order')
         raise
@@ -166,14 +167,16 @@ class FutureEngine:
     if side == 'long':
       try:
         self._log('Opening a long position...')
-        return self._proxy.long(symbol, type_of_trade, amount, price=price - 0.01, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
+        price = price - 0.01
+        return self._proxy.long(symbol, type_of_trade, amount, price=price, sl=stop_loss(side, price, sl_percent), tp=take_profit(side, price, tp_percent)), price
       except Exception as e:
         print('Failed to place long order')
         raise
     elif side == 'short':
       try:
         self._log('Opening a short position...')
-        return self._proxy.short(symbol, type_of_trade, amount, price=price + 0.01, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
+        price = price + 0.01
+        return self._proxy.short(symbol, type_of_trade, amount, price=price, sl=stop_loss(side, price, sl_percent), tp=take_profit(side, price, tp_percent)), price
       except Exception as e:
         print('Failed to place short order')
         raise
@@ -261,6 +264,54 @@ class FutureEngine:
       if prev_balance > self._wallet['balance']:
         self._trade_stats['losses'] += 1
 
+  def _close_order(self, order: object, entry: float):
+    """Closes order
+
+    Args:
+        order (object): OrderClient received from placing order
+        entry (float): Entry price of position for limit orders
+    """
+    if order.closed():
+      self._log(f'Order closed, position opened...')
+      # Mange open position
+      self._manage_position()
+      # Trade finished
+      # Update trade data
+      self._log('Trade complete, updating trade data...')
+      self._update_data()
+    else:
+      # Limit order
+      symbol = self._strategy.params['symbol']
+      # Will try to close order for about 1 minute
+      i = 0
+      while i < 60:
+        try:
+          price = self._proxy.price(symbol)
+
+          if price > entry or price < entry:
+            # Reopen order
+            order.cancel()
+            order, new_entry = self._open_limit_trade()
+
+          sleep(1)
+          # Check if order was filled
+          if order.closed(): break
+          else:
+            entry = new_entry
+        except Exception as e:
+          print(f'Failed to place order: \n{e}')
+          continue
+        finally:
+          i += 1
+
+      self._log(f'Order closed, position opened...')
+      # Mange open position
+      self._manage_position()
+      # Trade finished
+      # Update trade data
+      self._log('Trade complete, updating trade data...')
+      self._update_data()
+
 # ------------------------------ Client Methods ------------------------------ #
 
   def verbose(self):
@@ -303,36 +354,11 @@ class FutureEngine:
         self._find_entry()
         # Open position
         self._log('Opening a position...')
-        order = self._open_position()
+        order, entry = self._open_position()
         self._log(f'Order found: \{order}')
         # Check if order was closed
         self._log('Checking if order was closed...')
-        # TODO: Refactor
-        if order.closed():
-          self._log(f'Order closed, position opened...')
-          # Mange open position
-          self._manage_position()
-          # Trade finished
-          # Update trade data
-          self._log('Trade complete, updating trade data...')
-          self._update_data()
-        else:
-          tp_percent = self._strategy.params['tp_percent']
-          sl_percent = self._strategy.params['sl_percent']
-          # Limit order
-          # Will try to close order for 1 minute
-          if order.close(True, wait=2, tries=30, sl_percent=sl_percent, tp_percent=tp_percent):
-            self._log(f'Order closed, position opened...')
-            # Mange open position
-            self._manage_position()
-            # Trade finished
-            # Update trade data
-            self._log('Trade complete, updating trade data...')
-            self._update_data()
-          else:
-            # Order failed to close
-            self._log('Order failed to close, cancelling...')
-            if order.pending(): order.cancel()
+        self._close_order(order, entry)
       except InvalidParamError as e:
         print(f'Strategy contains invalid params: \n{e}')
       except Exception as e:
