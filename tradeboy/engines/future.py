@@ -5,20 +5,25 @@ from tradeboy.helpers.utility import sync
 from tradeboy.helpers.calc import take_profit, stop_loss
 from tradeboy.helpers.exceptions import InvalidParamError
 from time import sleep
+from discordwebhook import Discord
 
 # TODO: Add cleanup method (make sure no position/orders open, keep running after)
 # TODO: Exit strategy
-# TODO: Send logs to discord
 # TODO: Tools error handling and tests
 # TODO: Refactor
 
 class FutureEngine:
-  def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False):
+  def __init__(self, Strategy: object, rate: int = 20, verbose: bool = False, webhook: str = None):
     usd_balance = 0
+    self._discord = None
     try:
       self._strategy = Strategy()
       self._proxy = Proxy(verbose=verbose)
       usd_balance = self._proxy.balance(currency='USD', code='future')
+
+      if webhook:
+        self._discord = Discord(webhook)
+
     except Exception as e:
       print(f'Failed to initialize engine: \n{e}')
     finally:
@@ -28,11 +33,6 @@ class FutureEngine:
         "trade": 1,
         "wins": 0,
         "losses": 0
-      }
-      self._position_stats = {
-        "entry": 0,
-        "tp": 0,
-        "sl": 0
       }
       self._wallet = {
         "balance": usd_balance,
@@ -51,6 +51,16 @@ class FutureEngine:
     """
     if self._verbose:
         print(msg, end=end)
+        self._post(msg)
+
+  def _post(self, msg: str):
+    """Post message to discord
+
+    Args:
+        msg (str): Message to print to output
+    """
+    if self._discord and self._verbose:
+      self._discord.post(msg)
 
   def _find_entry(self):
     """Waits for strategy entry
@@ -115,21 +125,6 @@ class FutureEngine:
     sl_percent = self._strategy.params['sl_percent']
     symbol = self._strategy.params['symbol']
 
-    try:
-      # Calculate tp and sl
-      self._log('Calculating take profit and stop loss prices...')
-      price = self._proxy.price(symbol)
-      tp = take_profit(side, price, tp_percent)
-      sl = stop_loss(side, price, sl_percent)
-      self._log(f'\nTake Profit: {tp}\nStop Loss: {sl}\n')
-    except Exception as e:
-      print('Failed to calculate tp/sl')
-      raise
-    finally:
-      self._position_stats['entry'] = price
-      self._position_stats['tp'] = tp
-      self._position_stats['sl'] = sl
-
     # Place order
     if side == 'long':
       try:
@@ -167,32 +162,18 @@ class FutureEngine:
     symbol = self._strategy.params['symbol']
     price = self._proxy.price(symbol)
 
-    try:
-      # Calculate tp and sl
-      self._log('Calculating take profit and stop loss prices...')
-      tp = take_profit(side, price, tp_percent)
-      sl = stop_loss(side, price, sl_percent)
-      self._log(f'\nTake Profit: {tp}\nStop Loss: {sl}\n')
-    except Exception as e:
-      print('Failed to calculate tp/sl')
-      raise
-    finally:
-      self._position_stats['entry'] = price
-      self._position_stats['tp'] = tp
-      self._position_stats['sl'] = sl
-
     # Place order
     if side == 'long':
       try:
         self._log('Opening a long position...')
-        return self._proxy.long(symbol, type_of_trade, amount, price=price - 0.01, sl=sl, tp=tp)
+        return self._proxy.long(symbol, type_of_trade, amount, price=price - 0.01, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
       except Exception as e:
         print('Failed to place long order')
         raise
     elif side == 'short':
       try:
         self._log('Opening a short position...')
-        return self._proxy.short(symbol, type_of_trade, amount, price=price + 0.01, sl=sl, tp=tp)
+        return self._proxy.short(symbol, type_of_trade, amount, price=price + 0.01, sl=stop_loss(side, self._proxy.price(symbol), sl_percent), tp=take_profit(side, self._proxy.price(symbol), tp_percent))
       except Exception as e:
         print('Failed to place short order')
         raise
@@ -247,7 +228,6 @@ class FutureEngine:
       # Wait for position to be closed
       self._log('Waiting for position to be closed...')
       while not position._check_closed():
-        self.view_position_stats()
         sleep(self._rate)
     except Exception as e:
       print('Failed to check if position was closed')
@@ -291,25 +271,18 @@ class FutureEngine:
       """Turn off logging"""
       self._verbose = False
 
+  # TODO: Refactor trade_stats and view_wallet (combine them)
   def view_trade_stats(self):
     """Output stats"""
-    print(f'\nTrade: {self._trade_stats["trade"]}\nWins: {self._trade_stats["wins"]}\nLosses: {self._trade_stats["losses"]}\n')
-
-  def view_position_stats(self):
-    """Output position stats
-
-    Raises:
-      Exception - Failed to retrieve price and view position stats
-    """
-    try:
-      print(f'\nPrice: ${self._proxy.price(self._strategy.params["symbol"])}\nEntry: ${self._position_stats["entry"]}\nTake Profit: ${self._position_stats["tp"]}\nStop Loss: ${self._position_stats["sl"]}\n')
-    except Exception as e:
-      print('Failed to retrieve price and view position stats')
-      raise
+    msg = f'\nTrade: {self._trade_stats["trade"]}\nWins: {self._trade_stats["wins"]}\nLosses: {self._trade_stats["losses"]}\n'
+    print(msg)
+    self._post(msg)
 
   def view_wallet(self):
     """Output wallet information"""
-    print(f'\nBalance: ${self._wallet["balance"]}\nProfit/Loss: {self._wallet["pnl"]} (USD)\n')
+    msg = f'\nBalance: ${self._wallet["balance"]}\nProfit/Loss: {self._wallet["pnl"]} (USD)\n'
+    print(msg)
+    self._post(msg)
 
   def run(self, trades: int = 1):
     """Run the strategy

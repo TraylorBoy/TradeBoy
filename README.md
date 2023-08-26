@@ -20,13 +20,14 @@ pip install tradeboy
 - Engine handles placing orders
 - Strategy sends engine entry signals
   - exit signals not required if tp/sl percents provided in params
+- Can add Discord webhook to have logs sent to a server if verbose is set to True
 ```
 from tradeboy.engines.future import FutureEngine
 from strategies.example import Strategy as ex_strat
 
 # Rate is request rate
 # Runs example strategy in strategies folder
-engine = FutureEngine(Strategy=ex_strat, rate=30, verbose=True)
+engine = FutureEngine(Strategy=ex_strat, rate=30, verbose=True, webhook=None)
 engine.run(trades=100)
 ```
 
