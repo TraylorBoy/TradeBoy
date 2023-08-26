@@ -22,7 +22,7 @@ class FutureEngine:
       usd_balance = self._proxy.balance(currency='USD', code='future')
 
       if webhook:
-        self._discord = Discord(webhook)
+        self._discord = Discord(url=webhook)
 
     except Exception as e:
       print(f'Failed to initialize engine: \n{e}')
@@ -51,7 +51,7 @@ class FutureEngine:
     """
     if self._verbose:
         print(msg, end=end)
-        self._post(msg)
+        self._post(msg=msg)
 
   def _post(self, msg: str):
     """Post message to discord
@@ -60,7 +60,7 @@ class FutureEngine:
         msg (str): Message to print to output
     """
     if self._discord and self._verbose:
-      self._discord.post(msg)
+      self._discord.post(content=msg)
 
   def _find_entry(self):
     """Waits for strategy entry
@@ -276,13 +276,13 @@ class FutureEngine:
     """Output stats"""
     msg = f'\nTrade: {self._trade_stats["trade"]}\nWins: {self._trade_stats["wins"]}\nLosses: {self._trade_stats["losses"]}\n'
     print(msg)
-    self._post(msg)
+    self._post(msg=msg)
 
   def view_wallet(self):
     """Output wallet information"""
     msg = f'\nBalance: ${self._wallet["balance"]}\nProfit/Loss: {self._wallet["pnl"]} (USD)\n'
     print(msg)
-    self._post(msg)
+    self._post(msg=msg)
 
   def run(self, trades: int = 1):
     """Run the strategy
