@@ -286,18 +286,17 @@ class FutureEngine:
       i = 0
       while i < 60:
         try:
-          price = self._proxy.price(symbol)
+          # Check if order was filled
+          if order.closed(): break
 
+          price = self._proxy.price(symbol)
           if price > entry or price < entry:
             # Reopen order
             order.cancel()
             order, new_entry = self._open_limit_trade()
+            entry = new_entry
 
           sleep(1)
-          # Check if order was filled
-          if order.closed(): break
-          else:
-            entry = new_entry
         except Exception as e:
           print(f'Failed to place order: \n{e}')
           continue
