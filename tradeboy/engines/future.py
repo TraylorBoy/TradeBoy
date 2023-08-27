@@ -162,13 +162,14 @@ class FutureEngine:
     sl_percent = self._strategy.params['sl_percent']
     symbol = self._strategy.params['symbol']
     price = self._proxy.price(symbol)
+    entry = price
 
     # Place order
     if side == 'long':
       try:
         self._log('Opening a long position...')
         price = price - 0.01
-        return self._proxy.long(symbol, type_of_trade, amount, price=price, sl=stop_loss(side, price, sl_percent), tp=take_profit(side, price, tp_percent)), price
+        return self._proxy.long(symbol, type_of_trade, amount, price=price, sl=stop_loss(side, price, sl_percent), tp=take_profit(side, price, tp_percent)), entry
       except Exception as e:
         print('Failed to place long order')
         raise
@@ -287,7 +288,7 @@ class FutureEngine:
       while i < 60:
         try:
           # Check if order was filled
-          if order.closed(): break
+          if order.closed() and self._position_opened(): break
 
           price = self._proxy.price(symbol)
           if price > entry or price < entry:
@@ -310,6 +311,12 @@ class FutureEngine:
       # Update trade data
       self._log('Trade complete, updating trade data...')
       self._update_data()
+
+  def _position_opened(self):
+    """Checks if position was successfully opened or not"""
+    symbol = self._strategy.params['symbol']
+    position = self._proxy.position(symbol)
+    return position.query('contracts') > 0
 
 # ------------------------------ Client Methods ------------------------------ #
 
