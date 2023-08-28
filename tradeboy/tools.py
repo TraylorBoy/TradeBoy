@@ -3,13 +3,13 @@
 from phemexboy.proxy import Proxy
 from candleboy.core import CandleBoy
 
-# TODO: Error handling
-# TODO: Tests
-
 class Tools:
   def __init__(self, exchange: str, verbose: bool = False):
-    self.proxy = Proxy(verbose)
-    self.candle = CandleBoy(exchange, verbose)
+    try:
+      self.proxy = Proxy(verbose)
+      self.candle = CandleBoy(exchange, verbose)
+    except Exception as e:
+      print(f'Failed to initialize tools: \n{e}')
 
   def symbol(self, base: str, quote: str, code: str):
     """Creates a symbol representing the asset pairing
@@ -38,7 +38,10 @@ class Tools:
     Returns:
         Float: Current ask price for base currency
     """
-    return self.proxy.price(symbol)
+    try:
+      return self.proxy.price(symbol)
+    except Exception as e:
+      print(f'Failed to retrieve price: \n{e}')
 
   def ohlcv(self, symbol: str, tf: str, since: str = None):
     """Retrieve the open - high - low - close - volume data from exchange
@@ -51,7 +54,10 @@ class Tools:
     Returns:
         Tuple: open - high - low - close - volume data
     """
-    return self.candle.ohlcv(symbol, tf, since)
+    try:
+      return self.candle.ohlcv(symbol, tf, since)
+    except Exception as e:
+      print(f'Failed to retrieve OHLCV values: \n{e}')
 
   def macd(self, close: list, fastperiod: int = 12, slowperiod: int = 26, signalperiod: int = 9):
     """Returns the Moving Average Convergence/Divergence indicator values

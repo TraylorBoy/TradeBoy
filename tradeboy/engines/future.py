@@ -9,7 +9,6 @@ from discordwebhook import Discord
 
 # TODO: Add cleanup method (make sure no position/orders open, keep running after)
 # TODO: Exit strategy
-# TODO: Tools error handling and tests
 # TODO: Refactor
 # TODO: Add post to errors
 

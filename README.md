@@ -200,4 +200,7 @@ price = self.tools.price(symbol=self.params['symbol'])
 
 ```
 make test
+
+# Test tools
+make test-tools
 ```
