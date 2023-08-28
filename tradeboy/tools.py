@@ -57,7 +57,7 @@ class Tools:
     """Returns the Moving Average Convergence/Divergence indicator values
 
     See TA-Lib docs for details on parameters.
-    https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
+    https://ta-lib.github.io/ta-lib-python/
     """
     return self.candle.macd(close, fastperiod, slowperiod, signalperiod)
 
@@ -65,7 +65,7 @@ class Tools:
     """Returns the Exponential Moving Average indicator values
 
     See TA-Lib docs for details on parameters.
-    https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
+    https://ta-lib.github.io/ta-lib-python/
     """
     return self.candle.ema(close, timeperiod)
 
@@ -73,6 +73,22 @@ class Tools:
     """Returns the Stochastic indicator values
 
     See TA-Lib docs for details on parameters.
-    https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
+    https://ta-lib.github.io/ta-lib-python/
     """
     return self.candle.stoch(high, low, close, fastk_period, slowk_period, slowk_matype, slowd_period, slowd_matype)
+
+  def adx(self, high: list, low: list, close: list, timeperiod: int = 14):
+    """Returns the ADX indicator values
+
+    See TA-Lib docs for details on parameters.
+    https://ta-lib.github.io/ta-lib-python/
+    """
+    return self.candle.adx(high, low, close, timeperiod)
+
+  def mesa(self, close: list, fastlimit: int = 0.5, slowlimit: int = 0.05):
+    """Returns the MESA indicator values
+
+    See TA-Lib docs for details on parameters.
+    https://ta-lib.github.io/ta-lib-python/
+    """
+    return self.candle.mesa(close, fastlimit, slowlimit)

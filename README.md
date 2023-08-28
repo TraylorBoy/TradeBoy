@@ -182,6 +182,14 @@ ema = self.tools.ema(close)
 _, _, high, low, close, _ = self.tools.ohlcv(symbol=self.params['symbol'], tf='1m')
 slowk, slowd = self.tools.stoch(high, low, close)
 
+# Get adx
+_, _, high, low, close, _ = self.tools.ohlcv(symbol=self.params['symbol'], tf='1m')
+adx = self.tools.adx(high, low, close)
+
+# Get mesa
+_, _, _, _, close, _ = self.tools.ohlcv(symbol=self.params['symbol'], tf='1m')
+mama, fama = self.tools.mesa(close)
+
 # Get price
 price = self.tools.price(symbol=self.params['symbol'])
 ```
